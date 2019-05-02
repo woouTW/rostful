@@ -6,6 +6,8 @@ import sys
 
 # Reference for package structure since this is a flask app : http://flask.pocoo.org/docs/0.10/patterns/packages/
 from rostful import get_pyros_client
+import dynamic_reconfigure.client
+import rospy
 
 import time
 
@@ -107,9 +109,14 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
     View for backend pages
     """
     def __init__(self, rosname=None):
+        def null_function(config):
+            pass
         super(BackEnd, self).__init__()
 
         self.node_client = get_pyros_client()  # we retrieve pyros client from app context
+        rospy.init_node("rostful_client")
+        self.dr_client = dynamic_reconfigure.client.Client("dynamic_tutorials", timeout=30, config_callback=null_function)
+        self.is_dr = {}
 
         # dynamic import
         from pyros_interfaces_ros import definitions
@@ -117,6 +124,23 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def get(self, rosname=None):
+        def type_adopt(type_str):
+            if type_str == "str":
+                return "string"
+            elif type_str == "bool":
+                return "bool"
+            elif type_str in ["int", "float"]:
+                return type_str+"32"
+            elif type_str == "list":
+                return "string[]"
+            
+        def param_adopt(param):
+            param = dict(param)
+            param_name = rosname.split("/")[1]
+            type_name = type_adopt(type(param["prmtype"]).__name__)
+            param["msgtype"] = {param_name:type_name}
+            return param
+
         current_app.logger.debug('in BackEnd with rosname: %r', rosname)
 
         # dynamic import
@@ -144,6 +168,14 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
         services = self.node_client.services()
         topics = self.node_client.topics()
         params = self.node_client.params()
+        print(params, "api_0_1/flask_views")
+        for key in list(params.keys()):
+            val = params[key]
+            if type(val).__name__ != "dict":
+                self.is_dr[key] = True
+                params[key] = param_adopt(dict(val))
+            else:
+                self.is_dr[key] = False
 
         # Handling special case empty rosname and suffix
         if path == '/' and not suffix:

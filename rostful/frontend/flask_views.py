@@ -130,6 +130,23 @@ def ros_list():
 
 @app_blueprint.route('/<path:rosname>', strict_slashes=False, endpoint='ros_interface')
 def ros_interface(rosname):
+    def type_adopt(type_str):
+        if type_str == "str":
+            return "string"
+        elif type_str == "bool":
+            return "bool"
+        elif type_str in ["int", "float"]:
+            return type_str+"32"
+        elif type_str == "list":
+            return "string[]"
+        
+    def param_adopt(param):
+        param = dict(param)
+        param_name = rosname.split("/")[2]
+        type_name = type_adopt(type(param["prmtype"]).__name__)
+        param["msgtype"] = {param_name:type_name}
+        return param
+
     current_app.logger.debug('in ros_interface with rosname: %r', rosname)
 
     node_client = get_pyros_client()  # we retrieve pyros client from app context
@@ -170,6 +187,8 @@ def ros_interface(rosname):
     elif rosname in params:
         mode = 'param'
         param = params[rosname]
+        param = param_adopt(param)
+        print(param, "frontend/flaskviews")
         return render_template('param.html', param=param)
     else:
         raise ServiceNotFound("{0} not found among Pyros exposed services, topics and params".format(rosname))
