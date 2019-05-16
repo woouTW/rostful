@@ -354,7 +354,7 @@ class RostfulServiceProxy:
 import argparse
 
 def clientmain():
-	rospy.init_node('rostful_client', anonymous=True)
+	rospy.init_node('rostful_client', anonymous=False)
 	
 	parser = argparse.ArgumentParser()
 	

@@ -114,8 +114,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
         super(BackEnd, self).__init__()
 
         self.node_client = get_pyros_client()  # we retrieve pyros client from app context
-        rospy.init_node("rostful_client")
-        self.dr_client = dynamic_reconfigure.client.Client("dynamic_tutorials", timeout=30, config_callback=null_function)
+
         self.is_dr = {}
 
         # dynamic import
@@ -168,7 +167,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
         services = self.node_client.services()
         topics = self.node_client.topics()
         params = self.node_client.params()
-        print(params, "api_0_1/flask_views")
         for key in list(params.keys()):
             val = params[key]
             if type(val).__name__ != "dict":
@@ -295,6 +293,8 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def post(self, rosname, *args, **kwargs):
+        def null_function(config):
+            pass
 
         # fail early if no pyros client
         if self.node_client is None:
@@ -351,39 +351,49 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             #     msgconv.populate_instance(input_data, input_msg)
 
             response = None
-            try:
-                if mode == 'service':
-                    current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
-                    ret_msg = self.node_client.service_call(rosname, input_data)
+            if mode == 'service':
+                current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
+                ret_msg = self.node_client.service_call(rosname, input_data)
 
-                    if use_ros:
-                        content_type = ROS_MSG_MIMETYPE
-                        output_data = StringIO()
-                        ret_msg.serialize(output_data)
-                        output_data = output_data.getvalue()
-                    elif ret_msg:
-                        output_data = ret_msg  # the returned message is already converted from ros format by the client
-                        output_data['_format'] = 'ros'
-                        output_data = simplejson.dumps(output_data, ignore_nan=True)
-                        content_type = 'application/json'
-                    else:
-                        output_data = "{}"
-                        content_type = 'application/json'
+                if use_ros:
+                    content_type = ROS_MSG_MIMETYPE
+                    output_data = StringIO()
+                    ret_msg.serialize(output_data)
+                    output_data = output_data.getvalue()
+                elif ret_msg:
+                    output_data = ret_msg  # the returned message is already converted from ros format by the client
+                    output_data['_format'] = 'ros'
+                    output_data = simplejson.dumps(output_data, ignore_nan=True)
+                    content_type = 'application/json'
+                else:
+                    output_data = "{}"
+                    content_type = 'application/json'
 
-                    response = make_response(output_data, 200)
-                    response.mimetype = content_type
+                response = make_response(output_data, 200)
+                response.mimetype = content_type
 
-                elif mode == 'topic':
-                    current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
-                    self.node_client.topic_inject(rosname, input_data)
-                    response = make_response('{}', 200)
-                    response.mimetype = 'application/json'
-                elif mode == 'param':
-                    current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
-                    self.node_client.param_set(rosname, input_data)
-                    response = make_response('{}', 200)
-                    response.mimetype = 'application/json'
-                return response
+            elif mode == 'topic':
+                current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
+                self.node_client.topic_inject(rosname, input_data)
+                response = make_response('{}', 200)
+                response.mimetype = 'application/json'
+            elif mode == 'param':
+                rospy.init_node("rostful_client_for_dynamic_reconfigure")
+                node_name = rosname.split("/")[1]
+                dr_client = dynamic_reconfigure.client.Client(node_name, timeout=30, config_callback=null_function)
+        
+                current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
+                print(input_data)
+
+                dr_client.update_configuration(input_data)
+                
+                response = make_response('{}', 200)
+                response.mimetype = 'application/json'
+
+                dr_client.close()
+                rospy.signal_shutdown('Quit')
+            
+            return response
 
             # converting pyros exceptions to proper rostful exceptions
             # except (InvalidMessageException, NonexistentFieldException, FieldTypeMismatchException) as exc_value:
@@ -391,6 +401,8 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             #         message=str(exc_value.message),
             #         traceback=tblib.Traceback(sys.exc_info()[2]).to_dict()
             #     )
+            try:
+                pass
             except PyrosServiceTimeout as exc_value:
                 raise ServiceTimeout(
                     message=str(exc_value.message),
