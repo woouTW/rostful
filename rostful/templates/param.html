@@ -44,23 +44,16 @@ $(document).on('pageinit', '#mainlayout', function(){
   <h2>Update message</h2>
   <form action="" method=post data-ajax=false>
       {{ generate_inputs(param.msgtype) }}
-      <input class="ui-btn ui-corner-all ui-btn-inline ui-shadow" type="button" name="submit{{param.fullname|replace('/','_')}}" id="submit{{param.fullname|replace('/','_')}}" value="POST NEW MSG">
+      <input class="ui-btn ui-corner-all ui-btn-inline ui-shadow" type="submit" value="UPDATE VALUE" onclick="return sendPostRequest()">
   </form>
-  <button class="ui-btn ui-corner-all ui-btn-inline ui-shadow" id="update_latest{{param.fullname|replace('/','_')}}">
-    UPDATE VALUE
-  </button>
   <pre id="post_request{{param.fullname|replace('/','_')}}"></pre>
 {% endblock %}
 
 {% block POST_ajax %}
 <script type=text/javascript>
-
-$(document).on('pageinit', '#mainlayout', function(){
-  $(document).on('click', '#submit{{param.fullname|replace('/','_')}}', function() { // catch the form's submit event
+function sendPostRequest() {
     {{ generate_msgdata(param.msgtype) }}
 
-    //alert ( ' sending ' + JSON.stringify(msgdata) );
-    // Send data to Rostful backend through the Ajax call
     $.ajax({
         url: '{{ url_for('api_0_1.backend', rosname=param.fullname[1:], _external=True) }}',
         data: JSON.stringify(msgdata),
@@ -84,8 +77,7 @@ $(document).on('pageinit', '#mainlayout', function(){
         }
     });
     return false; // cancel original event to prevent form submitting
-  });
-});
+}
 </script>
 {% endblock %}
 

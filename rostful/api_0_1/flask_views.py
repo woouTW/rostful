@@ -378,19 +378,34 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response = make_response('{}', 200)
                 response.mimetype = 'application/json'
             elif mode == 'param':
-                rospy.init_node("rostful_client_for_dynamic_reconfigure")
-                node_name = rosname.split("/")[1]
-                dr_client = dynamic_reconfigure.client.Client(node_name, timeout=30, config_callback=null_function)
-        
-                current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
                 print(input_data)
+                rospy.init_node("rostful_client_for_dynamic_reconfigure")
+                node_name = '/' + rosname.split("/")[1]
+                
+                system_nodes = current_app.config.get('SYSTEM_PARAM_GROUP')
+                if node_name in system_nodes:
+                    print(current_app.config.get('SYSTEM_PARAM_GROUP'))
+                    for nname in system_nodes:
+                        nname = nname.split('/')[1]
+                        dr_client = dynamic_reconfigure.client.Client(nname, timeout=30, config_callback=null_function)
+            
+                        current_app.logger.debug('setting \n%s %s\'s param %s', input_data, nname, param.get('name'))
 
-                dr_client.update_configuration(input_data)
+                        dr_client.update_configuration(input_data)
+                        dr_client.close()
+
+                else:
+                    node_name = node_name.split('/')[1]
+                    dr_client = dynamic_reconfigure.client.Client(node_name, timeout=30, config_callback=null_function)
+        
+                    current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
+
+                    dr_client.update_configuration(input_data)
+                    dr_client.close()
                 
                 response = make_response('{}', 200)
                 response.mimetype = 'application/json'
 
-                dr_client.close()
                 rospy.signal_shutdown('Quit')
             
             return response

@@ -202,7 +202,7 @@ def setup_app_routes(app):
     # Follow pluggable views design : http://flask.pocoo.org/docs/0.10/views/
     # TODO : maybe add documentation/test pages from OPENAPI ?
     app.logger.info('Registering main Blueprint')
-    app.register_blueprint(frontend_blueprint, url_prefix='/frontend')
+    app.register_blueprint(frontend_blueprint, url_prefix='/')
 
     app.add_url_rule('/', view_func=generate_redirect('main.ros_list', new_endpoint="_redirect_._to_.ros_list"))
 

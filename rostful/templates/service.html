@@ -25,9 +25,9 @@ $(document).on('pageinit', '#mainlayout', function() {
 
   <!-- Service rostype_name : {{service.rostype_name}} -->
 
-  <form action="" method=post data-ajax=false>
+  <form data-ajax=false onsubmit="return false">
       {{ generate_inputs(service.srvtype[0]) }}
-      <input class="ui-btn ui-corner-all ui-btn-inline ui-shadow" type="button" name="submit" id="submit_{{ service.fullname|replace('/','_') }}" value="POST NEW MSG">
+      <input class="ui-btn ui-corner-all ui-btn-inline ui-shadow" type="submit" value="Send request" onclick="return sendPostRequest(this)">
   </form>
   <pre id="post_request_{{ service.fullname|replace('/','_') }}"></pre>
   <pre id="post_result_{{ service.fullname|replace('/','_') }}"></pre>
@@ -37,36 +37,33 @@ $(document).on('pageinit', '#mainlayout', function() {
 {% block POST_ajax %}
 <script type=text/javascript>
 
-$(document).on('pageinit', '#mainlayout', function(){
-  $(document).on('click', '#submit_{{ service.fullname|replace('/','_') }}', function() { // catch the form's submit event
-    {{ generate_msgdata(service.srvtype[0]) }}
-
-    // Send data to Rostful backend through the Ajax call
-    $.ajax({
-        url: '{{ url_for('api_0_1.backend', rosname=service.fullname[1:], _external=True) }}',
-        data: JSON.stringify(msgdata),
-        method: 'POST',
-        dataType: 'json',
-        beforeSend: function() {
-            // This callback function will trigger before data is sent
-            $("#post_request_{{ service.fullname|replace('/','_') }}").text(JSON.stringify(msgdata,null,2));
-          $.mobile.loading('show');// This will show ajax spinner
-        },
-        complete: function() {
-            // This callback function will trigger on data sent/received complete
-          $.mobile.loading('hide');// This will show ajax spinner
-        },
-        success: function (result) {
-            $("#post_result_{{ service.fullname|replace('/','_') }}").text(JSON.stringify(result,null,2));
-        },
-        error: function (request,error) {
-            // This callback function will trigger on unsuccessful action
-            alert('Network error has occurred please try again!');
-        }
-    });
+function sendPostRequest(form) {
+        {{ generate_msgdata(service.srvtype[0]) }}
+        // Send data to Rostful backend through the Ajax call
+        $.ajax({
+            url: '{{ url_for('api_0_1.backend', rosname=service.fullname[1:], _external=True) }}',
+            data: JSON.stringify(msgdata),
+            method: 'POST',
+            dataType: 'json',
+            beforeSend: function() {
+                // This callback function will trigger before data is sent
+                $("#post_request_{{ service.fullname|replace('/','_') }}").text(JSON.stringify(msgdata,null,2));
+              $.mobile.loading('show');// This will show ajax spinner
+            },
+            complete: function() {
+                // This callback function will trigger on data sent/received complete
+              $.mobile.loading('hide');// This will show ajax spinner
+            },
+            success: function (result) {
+                $("#post_result_{{ service.fullname|replace('/','_') }}").text(JSON.stringify(result,null,2));
+            },
+            error: function (request,error) {
+                // This callback function will trigger on unsuccessful action
+                alert('Network error has occurred please try again!');
+            }
+        });
     return false; // cancel original event to prevent form submitting
-  });
-});
+}
 </script>
 {% endblock %}
 
