@@ -142,7 +142,6 @@ def run(host, port, server, config, logfile, ros_args):
             paramNode = paramNode.strip('/').split('/')[0]
             if paramNode not in app.dr_dict:
                 app.dr_dict[paramNode] = dynamic_reconfigure.client.Client(paramNode, timeout=30, config_callback=null_function)
-                print(paramNode)
         # configure logger
 
         # add log handler for warnings and more to sys.stderr.

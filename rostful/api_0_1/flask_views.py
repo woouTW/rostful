@@ -231,7 +231,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 msg = self.node_client.topic_extract(path)
             else:
                 current_app.logger.warn('404 : %s', path)
-                msg = make_dict(description="not found name", result={"Error":1})
+                msg = make_dict(description="not found name", result={"error":1})
                 output_data = simplejson.dumps(msg, ignore_nan=True)
                 return make_response(output_data, 404)
 
@@ -348,6 +348,12 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             elif rosname in params:
                 mode = 'param'
                 param = params[rosname]
+            elif rosname == '/activateAll':
+                mode = 'custom'
+            elif rosname == '/robot/move':
+                mode = 'custom'
+            elif rosname == '/camera/pose':
+                mode = 'custom'
             else:
                 current_app.logger.warn('404 : %s', rosname)
                 return make_response('', 404)
@@ -398,7 +404,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     content_type = 'application/json'
 
                 if ret_msg["flag"] == False:
-                    msg = make_dict(description="wrong value, it should be one of enable/disable", result={"Error":1})
+                    msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
                 else:
                     msg = make_dict(description="succeed", result={"value":val})
                 output_data = simplejson.dumps(msg, ignore_nan=True)
@@ -426,9 +432,9 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     if (string_type_check(val) == int and defined_type not in ["int", "double"]) \
                         or (string_type_check(val) == float and defined_type not in ["double"]) \
                         or (string_type_check(val) == str and defined_type not in ["str"]):
-                        flag = False
+                        check = False
                         msg = make_dict(description="wrong type, type should be {:s}".format(defined_type),
-                                        result={"Error":1})
+                                        result={"error":1})
                     # Check range
                     elif defined_type in ["int", "double"]:
                         val_ = float(val)
@@ -443,7 +449,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
                 else:
                     check = False
-                    msg = make_dict(description="not found name", result={"Error":1})
+                    msg = make_dict(description="not found name", result={"error":1})
 
                 if check:
                     if '/'+node_name in system_nodes:
@@ -462,6 +468,39 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
                         msg = make_dict(description="succeed", result={"value": val}) if msg == None else msg
                 
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                response = make_response(output_data, 200)
+                response.mimetype = 'application/json'
+            elif mode == 'custom':
+                if rosname == '/activateAll':
+                    if "request" not in input_data:
+                        msg = make_dict(description="wrong request format",
+                                        result={"error":1})
+                        pass
+
+                    val = input_data["request"]
+                    for rosService in current_app.config.get('PYROS_SERVICES'):
+                        current_app.logger.debug('calling service %s with msg : %s', rosService, input_data)
+                        ret_msg = self.node_client.service_call(rosService, input_data)
+                        
+                        if use_ros:
+                            content_type = ROS_MSG_MIMETYPE
+                            output_data = StringIO()
+                            ret_msg.serialize(output_data)
+                        else:
+                            content_type = 'application/json'
+
+                        if ret_msg["flag"] == False:
+                            msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
+                            break
+
+                    msg = make_dict(description="succeed", result={"value":val})
+                    output_data = simplejson.dumps(msg, ignore_nan=True)
+                elif rosname == '/robot/move':
+                    pass
+                elif rosname == '/camera/pose':
+                    pass
+
                 output_data = simplejson.dumps(msg, ignore_nan=True)
                 response = make_response(output_data, 200)
                 response.mimetype = 'application/json'
