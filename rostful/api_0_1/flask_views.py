@@ -512,7 +512,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
                     path = input_data["path"]
                     result = {}
-                    for rosname, dr_client in current_app.dr_client.items(): 
+                    for rosname, dr_client in current_app.dr_dict.items(): 
                         result[rosname] = dr_client.get_configuration()
                     with open(path, "w") as output_file:
                         output_file.write(yaml.dump(result))
@@ -525,7 +525,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     path = input_data["path"]
                     with open(path) as input_file:
                         result = yaml.load(input_file.read())
-                    for rosname, dr_client in current_app.dr_client.items(): 
+                    for rosname, dr_client in current_app.dr_dict.items(): 
                         dr_client.update_configuration(result[rosname])
                     msg = make_dict(description="succeed", result={"value":"1"})
 
