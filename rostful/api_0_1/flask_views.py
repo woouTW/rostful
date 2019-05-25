@@ -293,9 +293,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def post(self, rosname, *args, **kwargs):
-        def null_function(config):
-            pass
-
         # fail early if no pyros client
         if self.node_client is None:
             current_app.logger.warn('404 : %s', rosname)
@@ -379,34 +376,30 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response.mimetype = 'application/json'
             elif mode == 'param':
                 print(input_data)
-                rospy.init_node("rostful_client_for_dynamic_reconfigure")
-                node_name = '/' + rosname.split("/")[1]
+                node_name = '/' + rosname.strip('/').split("/")[0]
                 
                 system_nodes = current_app.config.get('SYSTEM_PARAM_GROUP')
                 if node_name in system_nodes:
                     print(current_app.config.get('SYSTEM_PARAM_GROUP'))
                     for nname in system_nodes:
-                        nname = nname.split('/')[1]
-                        dr_client = dynamic_reconfigure.client.Client(nname, timeout=30, config_callback=null_function)
+                        nname = nname.strip('/').split('/')[0]
+                        dr_client = current_app.dr_dict[nname] 
             
                         current_app.logger.debug('setting \n%s %s\'s param %s', input_data, nname, param.get('name'))
 
                         dr_client.update_configuration(input_data)
-                        dr_client.close()
 
                 else:
                     node_name = node_name.split('/')[1]
-                    dr_client = dynamic_reconfigure.client.Client(node_name, timeout=30, config_callback=null_function)
+                    dr_client = current_app.dr_dict[node_name] 
         
                     current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
 
                     dr_client.update_configuration(input_data)
-                    dr_client.close()
+
                 
                 response = make_response('{}', 200)
                 response.mimetype = 'application/json'
-
-                rospy.signal_shutdown('Quit')
             
             return response
 

@@ -127,6 +127,22 @@ def run(host, port, server, config, logfile, ros_args):
 
         set_pyros_client(app, node_ctx.client)
 
+        # Dynamic reconfigure nodes initialization
+        import dynamic_reconfigure.client
+        import rospy
+
+        def null_function(config):
+            pass
+
+        rospy.init_node("dynamic_reconfigure_rospy_node")
+
+        app.dr_dict = {}
+
+        for paramNode in app.config.get('PYROS_PARAMS'):
+            paramNode = paramNode.strip('/').split('/')[0]
+            if paramNode not in app.dr_dict:
+                app.dr_dict[paramNode] = dynamic_reconfigure.client.Client(paramNode, timeout=30, config_callback=null_function)
+                print(paramNode)
         # configure logger
 
         # add log handler for warnings and more to sys.stderr.
@@ -174,6 +190,9 @@ def run(host, port, server, config, logfile, ros_args):
                 port_retries -= 1
                 port += 1
                 app.logger.error('Socket Error : {0}'.format(msg))
+
+
+     
 
 
 if __name__ == '__main__':
