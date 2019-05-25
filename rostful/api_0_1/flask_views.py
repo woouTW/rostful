@@ -8,6 +8,7 @@ import sys
 from rostful import get_pyros_client
 import dynamic_reconfigure.client
 import rospy
+import yaml
 
 import time
 
@@ -348,6 +349,10 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             elif rosname in params:
                 mode = 'param'
                 param = params[rosname]
+            elif rosname == '/paramDumpAll':
+                mode = 'custom'
+            elif rosname == '/paramLoadAll':
+                mode = 'custom'
             elif rosname == '/activateAll':
                 mode = 'custom'
             elif rosname == '/robot/move':
@@ -495,11 +500,34 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                             break
 
                     msg = make_dict(description="succeed", result={"value":val})
-                    output_data = simplejson.dumps(msg, ignore_nan=True)
                 elif rosname == '/robot/move':
                     pass
                 elif rosname == '/camera/pose':
                     pass
+                elif rosname == '/paramDumpAll':
+                    if "path" not in input_data:
+                        msg = make_dict(description="wrong path format",
+                                        result={"error":1})
+                        pass
+
+                    path = input_data["path"]
+                    result = {}
+                    for rosname, dr_client in current_app.dr_client.items(): 
+                        result[rosname] = dr_client.get_configuration()
+                    with open(path, "w") as output_file:
+                        output_file.write(yaml.dump(result))
+                    msg = make_dict(description="succeed", result={"value":"1"})
+                elif rosname == '/paramLoadAll':
+                    if "path" not in input_data:
+                        msg = make_dict(description="wrong path format",
+                                        result={"error":1})
+                        pass
+                    path = input_data["path"]
+                    with open(path) as input_file:
+                        result = yaml.load(input_file.read())
+                    for rosname, dr_client in current_app.dr_client.items(): 
+                        dr_client.update_configuration(result[rosname])
+                    msg = make_dict(description="succeed", result={"value":"1"})
 
                 output_data = simplejson.dumps(msg, ignore_nan=True)
                 response = make_response(output_data, 200)
