@@ -47,6 +47,7 @@ $(document).on('pageinit', '#mainlayout', function(){
       <input class="ui-btn ui-corner-all ui-btn-inline ui-shadow" type="submit" value="UPDATE VALUE" onclick="return sendPostRequest()">
   </form>
   <pre id="post_request{{param.fullname|replace('/','_')}}"></pre>
+  <pre id="post_result{{param.fullname|replace('/','_')}}"></pre>
 {% endblock %}
 
 {% block POST_ajax %}
