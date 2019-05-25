@@ -80,7 +80,7 @@ def find_rule(node_name, descriptions):
 def string_type_check(string):
     try:
         float(string)
-        if float(string) == int(string):
+        if float(string) == int(float(string)):
             return int
         else:
             return float
