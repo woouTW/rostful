@@ -62,6 +62,33 @@ def get_query_bool(query_string, param_name):
     return re.search(r'(^|&)%s((=(true|1))|&|$)' % param_name, query_string, re.IGNORECASE)
 
 
+def make_dict(**kwargs):
+    result = {}
+    for key, val in kwargs.items():
+        result[key] = val
+    return result
+
+
+def find_rule(node_name, descriptions):
+    for description in descriptions:
+        if description["name"] == node_name:
+            return description
+    return None
+
+
+def string_type_check(string):
+    try:
+        float(string)
+        if float(string) == int(string):
+            return int
+        else:
+            return float
+    except:
+        return str
+
+    
+
+
 from flask import request, make_response, render_template, jsonify, redirect
 from flask.views import MethodView
 from flask_restful import reqparse
@@ -204,7 +231,9 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 msg = self.node_client.topic_extract(path)
             else:
                 current_app.logger.warn('404 : %s', path)
-                return make_response('', 404)
+                msg = make_dict(description="not found name", result={"Error":1})
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                return make_response(output_data, 404)
 
             #current_app.logger.debug('mimetypes : %s', request.accept_mimetypes)
 
@@ -214,6 +243,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
             # This changes nan to null (instead of default json encoder that changes nan to invalid json NaN).
             # some client might be picky and this should probably be a configuration setting...
+            msg = make_dict(description="succeed", result={"value":msg})
             output_data = simplejson.dumps(msg, ignore_nan=True)
             mime_type = 'application/json'
 
@@ -351,6 +381,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             if mode == 'service':
                 current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
                 ret_msg = self.node_client.service_call(rosname, input_data)
+                name, val = input_data.items()[0]
 
                 if use_ros:
                     content_type = ROS_MSG_MIMETYPE
@@ -366,39 +397,73 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     output_data = "{}"
                     content_type = 'application/json'
 
+                if ret_msg["flag"] == False:
+                    msg = make_dict(description="wrong value, it should be one of enable/disable", result={"Error":1})
+                else:
+                    msg = make_dict(description="succeed", result={"value":val})
+                output_data = simplejson.dumps(msg, ignore_nan=True)
                 response = make_response(output_data, 200)
                 response.mimetype = content_type
-
             elif mode == 'topic':
                 current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
                 self.node_client.topic_inject(rosname, input_data)
                 response = make_response('{}', 200)
                 response.mimetype = 'application/json'
             elif mode == 'param':
-                print(input_data)
-                node_name = '/' + rosname.strip('/').split("/")[0]
+                node_name = rosname.strip('/').split("/")[0]
+                dr_client = current_app.dr_dict[node_name] 
                 
                 system_nodes = current_app.config.get('SYSTEM_PARAM_GROUP')
-                if node_name in system_nodes:
-                    print(current_app.config.get('SYSTEM_PARAM_GROUP'))
-                    for nname in system_nodes:
-                        nname = nname.strip('/').split('/')[0]
-                        dr_client = current_app.dr_dict[nname] 
-            
-                        current_app.logger.debug('setting \n%s %s\'s param %s', input_data, nname, param.get('name'))
+                name, val = input_data.items()[0]
+                rule = find_rule(name, dr_client.get_parameter_descriptions())
+                check = True
+                msg = None
+
+                if rule != None:
+                    defined_type = rule["type"]
+                    defined_range = (rule["min"], rule["max"])
+                    # Check type
+                    if (string_type_check(val) == int and defined_type not in ["int", "double"]) \
+                        or (string_type_check(val) == float and defined_type not in ["double"]) \
+                        or (string_type_check(val) == str and defined_type not in ["str"]):
+                        flag = False
+                        msg = make_dict(description="wrong type, type should be {:s}".format(defined_type),
+                                        result={"Error":1})
+                    # Check range
+                    elif defined_type in ["int", "double"]:
+                        val_ = float(val)
+                        if val_ > defined_range[1]:
+                            msg = make_dict(description="succeed",
+                                            warning="given value exceeds the defined range, value should be less than {:f}".format(defined_range[1]),
+                                            result={"value":str(defined_range[1])})
+                        elif val_ < defined_range[0]:
+                            msg = make_dict(description="succeed",
+                                            warning="given value exceeds the defined range, value should be greater than {:f}".format(defined_range[0]),
+                                            result={"value":str(defined_range[0])})
+
+                else:
+                    check = False
+                    msg = make_dict(description="not found name", result={"Error":1})
+
+                if check:
+                    if '/'+node_name in system_nodes:
+                        for nname in system_nodes:
+                            nname = nname.strip('/').split('/')[0]
+                            dr_client = current_app.dr_dict[nname] 
+                
+                            current_app.logger.debug('setting \n%s %s\'s param %s', input_data, nname, param.get('name'))
+
+                            dr_client.update_configuration(input_data)
+                        msg = make_dict(description="succeed", result={"value": val}) if msg == None else msg
+                    else:
+                        current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
 
                         dr_client.update_configuration(input_data)
 
-                else:
-                    node_name = node_name.split('/')[1]
-                    dr_client = current_app.dr_dict[node_name] 
-        
-                    current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
-
-                    dr_client.update_configuration(input_data)
-
+                        msg = make_dict(description="succeed", result={"value": val}) if msg == None else msg
                 
-                response = make_response('{}', 200)
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                response = make_response(output_data, 200)
                 response.mimetype = 'application/json'
             
             return response
