@@ -105,6 +105,11 @@ from pyros_common.exceptions import PyrosException
 
 from rostful.exceptions import ServiceNotFound, ServiceTimeout, WrongMessageFormat
 
+from std_msgs.msg import Float64
+from geometry_msgs.msg import Twist
+
+import os
+
 
 class Timeout(object):
     """
@@ -349,15 +354,15 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             elif rosname in params:
                 mode = 'param'
                 param = params[rosname]
-            elif rosname == '/paramDumpAll':
+            elif rosname == '/Robot/ParamDumpAll':
                 mode = 'custom'
-            elif rosname == '/paramLoadAll':
+            elif rosname == '/Robot/ParamLoadAll':
                 mode = 'custom'
-            elif rosname == '/activateAll':
+            elif rosname == '/Robot/ActivateAll':
                 mode = 'custom'
-            elif rosname == '/robot/move':
+            elif rosname == '/Robot/Move':
                 mode = 'custom'
-            elif rosname == '/camera/pose':
+            elif rosname == '/Camera/Rotate':
                 mode = 'custom'
             else:
                 current_app.logger.warn('404 : %s', rosname)
@@ -477,7 +482,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response = make_response(output_data, 200)
                 response.mimetype = 'application/json'
             elif mode == 'custom':
-                if rosname == '/activateAll':
+                if rosname == '/Robot/ActivateAll':
                     if "request" not in input_data:
                         msg = make_dict(description="wrong request format",
                                         result={"error":1})
@@ -500,11 +505,63 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                             break
 
                     msg = make_dict(description="succeed", result={"value":val})
-                elif rosname == '/robot/move':
-                    pass
-                elif rosname == '/camera/pose':
-                    pass
-                elif rosname == '/paramDumpAll':
+                elif rosname == '/Robot/Move':
+                    if "value" not in input_data:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                    
+                    val = input_data['value']
+                    if "linear" not in val or "angular" not in val:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                   
+                    linear_val = float(val["linear"])
+                    angular_val = float(val["angular"])
+                    
+                    if linear_val < 0 or angular_val < 0: 
+                        msg = make_dict(description="given value exceeds the defined range",
+                                        result={"error":1})
+                        pass
+
+                    dr_client = current_app.dr_dict['BaseControllerSystemParams']
+                    topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
+                    print(topic_name)
+
+                    vel_msg = Twist()
+                    vel_msg.linear.x = linear_val
+                    vel_msg.linear.y = 0
+                    vel_msg.linear.z = 0
+                    vel_msg.angular.x = 0 
+                    vel_msg.angular.y = 0
+                    vel_msg.angular.z = angular_val 
+                    pub = rospy.Publisher(topic_name, Twist, queue_size=10)
+                    pub.publish(vel_msg)
+
+                    msg = make_dict(description="succeed",
+                                    result={"value":val})
+                elif rosname == '/Camera/Rotate':
+                    if "value" not in input_data:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                    
+                    val = float(input_data['value'])
+                    if val > 3.14 or val < -3.14:
+                        msg = make_dict(description="given value exceeds the defined range",
+                                        result={"error":1})
+                        pass
+
+                    dr_client = current_app.dr_dict['CameraRotatorSystemParams']
+                    topic_name = dr_client.get_configuration()['ROTATOR_COMMAND_TOPIC']
+
+                    pub = rospy.Publisher(topic_name, Float64, queue_size=10)
+                    pub.publish(Float64(val))
+
+                    msg = make_dict(description="succeed",
+                                    result={"value":val})
+                elif rosname == '/Robot/ParamDumpAll':
                     if "path" not in input_data:
                         msg = make_dict(description="wrong path format",
                                         result={"error":1})
@@ -517,7 +574,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     with open(path, "w") as output_file:
                         output_file.write(yaml.dump(result))
                     msg = make_dict(description="succeed", result={"value":"1"})
-                elif rosname == '/paramLoadAll':
+                elif rosname == '/Robot/ParamLoadAll':
                     if "path" not in input_data:
                         msg = make_dict(description="wrong path format",
                                         result={"error":1})
