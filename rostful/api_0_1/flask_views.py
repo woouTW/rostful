@@ -6,6 +6,9 @@ import sys
 
 # Reference for package structure since this is a flask app : http://flask.pocoo.org/docs/0.10/patterns/packages/
 from rostful import get_pyros_client
+import dynamic_reconfigure.client
+import rospy
+import yaml
 
 import time
 
@@ -60,6 +63,33 @@ def get_query_bool(query_string, param_name):
     return re.search(r'(^|&)%s((=(true|1))|&|$)' % param_name, query_string, re.IGNORECASE)
 
 
+def make_dict(**kwargs):
+    result = {}
+    for key, val in kwargs.items():
+        result[key] = val
+    return result
+
+
+def find_rule(node_name, descriptions):
+    for description in descriptions:
+        if description["name"] == node_name:
+            return description
+    return None
+
+
+def string_type_check(string):
+    try:
+        float(string)
+        if float(string) == int(float(string)):
+            return int
+        else:
+            return float
+    except:
+        return str
+
+    
+
+
 from flask import request, make_response, render_template, jsonify, redirect
 from flask.views import MethodView
 from flask_restful import reqparse
@@ -74,6 +104,11 @@ parser = FlaskParser()
 from pyros_common.exceptions import PyrosException
 
 from rostful.exceptions import ServiceNotFound, ServiceTimeout, WrongMessageFormat
+
+from std_msgs.msg import Float64
+from geometry_msgs.msg import Twist
+
+import os
 
 
 class Timeout(object):
@@ -107,9 +142,13 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
     View for backend pages
     """
     def __init__(self, rosname=None):
+        def null_function(config):
+            pass
         super(BackEnd, self).__init__()
 
         self.node_client = get_pyros_client()  # we retrieve pyros client from app context
+
+        self.is_dr = {}
 
         # dynamic import
         from pyros_interfaces_ros import definitions
@@ -117,6 +156,23 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def get(self, rosname=None):
+        def type_adopt(type_str):
+            if type_str == "str":
+                return "string"
+            elif type_str == "bool":
+                return "bool"
+            elif type_str in ["int", "float"]:
+                return type_str+"32"
+            elif type_str == "list":
+                return "string[]"
+            
+        def param_adopt(param):
+            param = dict(param)
+            param_name = rosname.split("/")[1]
+            type_name = type_adopt(type(param["prmtype"]).__name__)
+            param["msgtype"] = {param_name:type_name}
+            return param
+
         current_app.logger.debug('in BackEnd with rosname: %r', rosname)
 
         # dynamic import
@@ -144,6 +200,13 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
         services = self.node_client.services()
         topics = self.node_client.topics()
         params = self.node_client.params()
+        for key in list(params.keys()):
+            val = params[key]
+            if type(val).__name__ != "dict":
+                self.is_dr[key] = True
+                params[key] = param_adopt(dict(val))
+            else:
+                self.is_dr[key] = False
 
         # Handling special case empty rosname and suffix
         if path == '/' and not suffix:
@@ -174,7 +237,9 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 msg = self.node_client.topic_extract(path)
             else:
                 current_app.logger.warn('404 : %s', path)
-                return make_response('', 404)
+                msg = make_dict(description="not found name", result={"error":1})
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                return make_response(output_data, 404)
 
             #current_app.logger.debug('mimetypes : %s', request.accept_mimetypes)
 
@@ -184,6 +249,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
             # This changes nan to null (instead of default json encoder that changes nan to invalid json NaN).
             # some client might be picky and this should probably be a configuration setting...
+            msg = make_dict(description="succeed", result={"value":msg})
             output_data = simplejson.dumps(msg, ignore_nan=True)
             mime_type = 'application/json'
 
@@ -263,7 +329,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def post(self, rosname, *args, **kwargs):
-
         # fail early if no pyros client
         if self.node_client is None:
             current_app.logger.warn('404 : %s', rosname)
@@ -289,6 +354,16 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             elif rosname in params:
                 mode = 'param'
                 param = params[rosname]
+            elif rosname == '/Robot/ParamDumpAll':
+                mode = 'custom'
+            elif rosname == '/Robot/ParamLoadAll':
+                mode = 'custom'
+            elif rosname == '/Robot/ActivateAll':
+                mode = 'custom'
+            elif rosname == '/Robot/Move':
+                mode = 'custom'
+            elif rosname == '/Camera/Rotate':
+                mode = 'custom'
             else:
                 current_app.logger.warn('404 : %s', rosname)
                 return make_response('', 404)
@@ -319,39 +394,203 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             #     msgconv.populate_instance(input_data, input_msg)
 
             response = None
-            try:
-                if mode == 'service':
-                    current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
-                    ret_msg = self.node_client.service_call(rosname, input_data)
+            if mode == 'service':
+                current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
+                ret_msg = self.node_client.service_call(rosname, input_data)
+                name, val = input_data.items()[0]
 
-                    if use_ros:
-                        content_type = ROS_MSG_MIMETYPE
-                        output_data = StringIO()
-                        ret_msg.serialize(output_data)
-                        output_data = output_data.getvalue()
-                    elif ret_msg:
-                        output_data = ret_msg  # the returned message is already converted from ros format by the client
-                        output_data['_format'] = 'ros'
-                        output_data = simplejson.dumps(output_data, ignore_nan=True)
-                        content_type = 'application/json'
+                if use_ros:
+                    content_type = ROS_MSG_MIMETYPE
+                    output_data = StringIO()
+                    ret_msg.serialize(output_data)
+                    output_data = output_data.getvalue()
+                elif ret_msg:
+                    output_data = ret_msg  # the returned message is already converted from ros format by the client
+                    output_data['_format'] = 'ros'
+                    output_data = simplejson.dumps(output_data, ignore_nan=True)
+                    content_type = 'application/json'
+                else:
+                    output_data = "{}"
+                    content_type = 'application/json'
+
+                if ret_msg["flag"] == False:
+                    msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
+                else:
+                    msg = make_dict(description="succeed", result={"value":val})
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                response = make_response(output_data, 200)
+                response.mimetype = content_type
+            elif mode == 'topic':
+                current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
+                self.node_client.topic_inject(rosname, input_data)
+                response = make_response('{}', 200)
+                response.mimetype = 'application/json'
+            elif mode == 'param':
+                node_name = rosname.strip('/').split("/")[0]
+                dr_client = current_app.dr_dict[node_name] 
+                
+                system_nodes = current_app.config.get('SYSTEM_PARAM_GROUP')
+                name, val = input_data.items()[0]
+                rule = find_rule(name, dr_client.get_parameter_descriptions())
+                check = True
+                msg = None
+
+                if rule != None:
+                    defined_type = rule["type"]
+                    defined_range = (rule["min"], rule["max"])
+                    # Check type
+                    if (string_type_check(val) == int and defined_type not in ["int", "double"]) \
+                        or (string_type_check(val) == float and defined_type not in ["double"]) \
+                        or (string_type_check(val) == str and defined_type not in ["str"]):
+                        check = False
+                        msg = make_dict(description="wrong type, type should be {:s}".format(defined_type),
+                                        result={"error":1})
+                    # Check range
+                    elif defined_type in ["int", "double"]:
+                        val_ = float(val)
+                        if val_ > defined_range[1]:
+                            msg = make_dict(description="succeed",
+                                            warning="given value exceeds the defined range, value should be less than {:f}".format(defined_range[1]),
+                                            result={"value":str(defined_range[1])})
+                        elif val_ < defined_range[0]:
+                            msg = make_dict(description="succeed",
+                                            warning="given value exceeds the defined range, value should be greater than {:f}".format(defined_range[0]),
+                                            result={"value":str(defined_range[0])})
+
+                else:
+                    check = False
+                    msg = make_dict(description="not found name", result={"error":1})
+
+                if check:
+                    if '/'+node_name in system_nodes:
+                        for nname in system_nodes:
+                            nname = nname.strip('/').split('/')[0]
+                            dr_client = current_app.dr_dict[nname] 
+                
+                            current_app.logger.debug('setting \n%s %s\'s param %s', input_data, nname, param.get('name'))
+
+                            dr_client.update_configuration(input_data)
+                        msg = make_dict(description="succeed", result={"value": val}) if msg == None else msg
                     else:
-                        output_data = "{}"
-                        content_type = 'application/json'
+                        current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
 
-                    response = make_response(output_data, 200)
-                    response.mimetype = content_type
+                        dr_client.update_configuration(input_data)
 
-                elif mode == 'topic':
-                    current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
-                    self.node_client.topic_inject(rosname, input_data)
-                    response = make_response('{}', 200)
-                    response.mimetype = 'application/json'
-                elif mode == 'param':
-                    current_app.logger.debug('setting \n%s param %s', input_data, param.get('name'))
-                    self.node_client.param_set(rosname, input_data)
-                    response = make_response('{}', 200)
-                    response.mimetype = 'application/json'
-                return response
+                        msg = make_dict(description="succeed", result={"value": val}) if msg == None else msg
+                
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                response = make_response(output_data, 200)
+                response.mimetype = 'application/json'
+            elif mode == 'custom':
+                if rosname == '/Robot/ActivateAll':
+                    if "request" not in input_data:
+                        msg = make_dict(description="wrong request format",
+                                        result={"error":1})
+                        pass
+
+                    val = input_data["request"]
+                    for rosService in current_app.config.get('PYROS_SERVICES'):
+                        current_app.logger.debug('calling service %s with msg : %s', rosService, input_data)
+                        ret_msg = self.node_client.service_call(rosService, input_data)
+                        
+                        if use_ros:
+                            content_type = ROS_MSG_MIMETYPE
+                            output_data = StringIO()
+                            ret_msg.serialize(output_data)
+                        else:
+                            content_type = 'application/json'
+
+                        if ret_msg["flag"] == False:
+                            msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
+                            break
+
+                    msg = make_dict(description="succeed", result={"value":val})
+                elif rosname == '/Robot/Move':
+                    if "value" not in input_data:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                    
+                    val = input_data['value']
+                    if "linear" not in val or "angular" not in val:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                   
+                    linear_val = float(val["linear"])
+                    angular_val = float(val["angular"])
+                    
+                    if linear_val < 0 or angular_val < 0: 
+                        msg = make_dict(description="given value exceeds the defined range",
+                                        result={"error":1})
+                        pass
+
+                    dr_client = current_app.dr_dict['BaseControllerSystemParams']
+                    topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
+                    print(topic_name)
+
+                    vel_msg = Twist()
+                    vel_msg.linear.x = linear_val
+                    vel_msg.linear.y = 0
+                    vel_msg.linear.z = 0
+                    vel_msg.angular.x = 0 
+                    vel_msg.angular.y = 0
+                    vel_msg.angular.z = angular_val 
+                    pub = rospy.Publisher(topic_name, Twist, queue_size=10)
+                    pub.publish(vel_msg)
+
+                    msg = make_dict(description="succeed",
+                                    result={"value":val})
+                elif rosname == '/Camera/Rotate':
+                    if "value" not in input_data:
+                        msg = make_dict(description="wrong value format",
+                                        result={"error":1})
+                        pass
+                    
+                    val = float(input_data['value'])
+                    if val > 3.14 or val < -3.14:
+                        msg = make_dict(description="given value exceeds the defined range",
+                                        result={"error":1})
+                        pass
+
+                    dr_client = current_app.dr_dict['CameraRotatorSystemParams']
+                    topic_name = dr_client.get_configuration()['ROTATOR_COMMAND_TOPIC']
+
+                    pub = rospy.Publisher(topic_name, Float64, queue_size=10)
+                    pub.publish(Float64(val))
+
+                    msg = make_dict(description="succeed",
+                                    result={"value":val})
+                elif rosname == '/Robot/ParamDumpAll':
+                    if "path" not in input_data:
+                        msg = make_dict(description="wrong path format",
+                                        result={"error":1})
+                        pass
+
+                    path = input_data["path"]
+                    result = {}
+                    for rosname, dr_client in current_app.dr_dict.items(): 
+                        result[rosname] = dr_client.get_configuration()
+                    with open(path, "w") as output_file:
+                        output_file.write(yaml.dump(result))
+                    msg = make_dict(description="succeed", result={"value":"1"})
+                elif rosname == '/Robot/ParamLoadAll':
+                    if "path" not in input_data:
+                        msg = make_dict(description="wrong path format",
+                                        result={"error":1})
+                        pass
+                    path = input_data["path"]
+                    with open(path) as input_file:
+                        result = yaml.load(input_file.read())
+                    for rosname, dr_client in current_app.dr_dict.items(): 
+                        dr_client.update_configuration(result[rosname])
+                    msg = make_dict(description="succeed", result={"value":"1"})
+
+                output_data = simplejson.dumps(msg, ignore_nan=True)
+                response = make_response(output_data, 200)
+                response.mimetype = 'application/json'
+            
+            return response
 
             # converting pyros exceptions to proper rostful exceptions
             # except (InvalidMessageException, NonexistentFieldException, FieldTypeMismatchException) as exc_value:
@@ -359,6 +598,8 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             #         message=str(exc_value.message),
             #         traceback=tblib.Traceback(sys.exc_info()[2]).to_dict()
             #     )
+            try:
+                pass
             except PyrosServiceTimeout as exc_value:
                 raise ServiceTimeout(
                     message=str(exc_value.message),
