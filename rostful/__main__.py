@@ -71,6 +71,32 @@ def pyros_start(config, ros_args='', pyros_ctx_impl=None):
                             base_path=os.path.join(os.path.dirname(__file__), '..', '..', '..'))
     return node_ctx_gen
 
+import requests, yaml, json
+
+def ROSmsg2Json(msg):
+    return json.dumps(yaml.full_load(str(msg)))
+
+def switchReportCallback(data):
+    payload = ROSmsg2Json(data)
+    headers = {'Content-Type': 'application/json; charset=urf-8'}
+    URL = '127.0.0.1:8081/SwitchReport'
+    requests.post(URL, data=payload, headers=headers)
+
+    return
+    
+def joystickReportCallback(data):
+    dataBody = yaml.full_load(str(data))
+    del dataBody['header']
+
+    if joystickReportCallback.lastData != dataBody:
+        payload = ROSmsg2Json(data)
+        headers = {'Content-Type': 'application/json; charset=urf-8'}
+        URL = '127.0.0.1:8081/JoystickReport'
+        requests.post(URL, data=payload, headers=headers)
+
+    joystickReportCallback.lastData = dataBody
+    return
+
 # TODO : handle ros arguments here
 # http://click.pocoo.org/5/commands/#group-invocation-without-command
 @click.group()
@@ -127,6 +153,32 @@ def run(host, port, server, config, logfile, ros_args):
 
         set_pyros_client(app, node_ctx.client)
 
+        # Dynamic reconfigure nodes initialization
+        import dynamic_reconfigure.client
+        import rospy, rostopic, roslib
+
+        def null_function(config):
+            pass
+
+        rospy.init_node("dynamic_reconfigure_rospy_node")
+
+        # ROS topic subscription using rospy
+        switch_type = rostopic.get_topic_type('/twinny_robot/SwitchReport')[0]
+        joystick_type = rostopic.get_topic_type('/twinny_robot/JoystickReport')[0]
+
+        SwitchReport = roslib.message.get_message_class(switch_type)
+        JoystickReport = roslib.message.get_message_class(joystick_type)
+        
+        joystickReportCallback.lastData = JoystickReport()
+
+        rospy.Subscriber('/twinny_robot/SwitchReport', SwitchReport, switchReportCallback)
+        rospy.Subscriber('/twinny_robot/JoystickReport', JoystickReport, joystickReportCallback)
+
+        app.dr_dict = {}
+
+        for node in app.config.get('DR_CLIENT_NODES'):
+            node = node.strip('/')
+            app.dr_dict[node] = dynamic_reconfigure.client.Client(node, timeout=30, config_callback=null_function)
         # configure logger
 
         # add log handler for warnings and more to sys.stderr.
@@ -174,6 +226,7 @@ def run(host, port, server, config, logfile, ros_args):
                 port_retries -= 1
                 port += 1
                 app.logger.error('Socket Error : {0}'.format(msg))
+
 
 
 if __name__ == '__main__':
