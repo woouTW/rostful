@@ -364,6 +364,8 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 mode = 'custom'
             elif rosname == '/Camera/Rotate':
                 mode = 'custom'
+            elif rosname == '/Robot/LEDControl':
+                mode = 'custom'
             else:
                 current_app.logger.warn('404 : %s', rosname)
                 return make_response('', 404)
@@ -413,6 +415,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     output_data = "{}"
                     content_type = 'application/json'
 
+                print(ret_msg)
                 if ret_msg["flag"] == False:
                     msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
                 else:
@@ -483,108 +486,135 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response.mimetype = 'application/json'
             elif mode == 'custom':
                 if rosname == '/Robot/ActivateAll':
-                    if "request" not in input_data:
-                        msg = make_dict(description="wrong request format",
-                                        result={"error":1})
-                        pass
+                    def activateAll(input_data):
+                        if "request" not in input_data:
+                            return make_dict(description="wrong request format",
+                                            result={"error":1})
 
-                    val = input_data["request"]
-                    for rosService in current_app.config.get('PYROS_SERVICES'):
-                        current_app.logger.debug('calling service %s with msg : %s', rosService, input_data)
-                        ret_msg = self.node_client.service_call(rosService, input_data)
-                        
-                        if use_ros:
-                            content_type = ROS_MSG_MIMETYPE
-                            output_data = StringIO()
-                            ret_msg.serialize(output_data)
-                        else:
-                            content_type = 'application/json'
+                        val = input_data["request"]
+                        for rosService in current_app.config.get('PYROS_SERVICES'):
+                            current_app.logger.debug('calling service %s with msg : %s', rosService, input_data)
+                            ret_msg = self.node_client.service_call(rosService, input_data)
+                            
+                            if use_ros:
+                                content_type = ROS_MSG_MIMETYPE
+                                output_data = StringIO()
+                                ret_msg.serialize(output_data)
+                            else:
+                                content_type = 'application/json'
 
-                        if ret_msg["flag"] == False:
-                            msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
-                            break
-
-                    msg = make_dict(description="succeed", result={"value":val})
+                            if ret_msg["flag"] == False:
+                                return make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
+                        return make_dict(description="succeed", result={"value":val})
+                    msg = activateAll(msg)
                 elif rosname == '/Robot/Move':
-                    if "value" not in input_data:
-                        msg = make_dict(description="wrong value format",
-                                        result={"error":1})
-                        pass
-                    
-                    val = input_data['value']
-                    if "linear" not in val or "angular" not in val:
-                        msg = make_dict(description="wrong value format",
-                                        result={"error":1})
-                        pass
-                   
-                    linear_val = float(val["linear"])
-                    angular_val = float(val["angular"])
-                    
-                    if linear_val < 0 or angular_val < 0: 
-                        msg = make_dict(description="given value exceeds the defined range",
-                                        result={"error":1})
-                        pass
+                    def robotMove(input_data):
+                        if "value" not in input_data:
+                            return make_dict(description="wrong value format",
+                                            result={"error":1})
+                        
+                        val = input_data['value']
+                        if "linear" not in val or "angular" not in val:
+                            return make_dict(description="wrong value format",
+                                            result={"error":1})
+                       
+                        linear_val = float(val["linear"])
+                        angular_val = float(val["angular"])
+                        
+                        if linear_val < 0 or angular_val < 0: 
+                            return make_dict(description="given value exceeds the defined range",
+                                            result={"error":1})
 
-                    dr_client = current_app.dr_dict['BaseControllerSystemParams']
-                    topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
-                    print(topic_name)
+                        dr_client = current_app.dr_dict['BaseControllerSystemParams']
+                        topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
+                        print(topic_name)
 
-                    vel_msg = Twist()
-                    vel_msg.linear.x = linear_val
-                    vel_msg.linear.y = 0
-                    vel_msg.linear.z = 0
-                    vel_msg.angular.x = 0 
-                    vel_msg.angular.y = 0
-                    vel_msg.angular.z = angular_val 
-                    pub = rospy.Publisher(topic_name, Twist, queue_size=10)
-                    pub.publish(vel_msg)
+                        vel_msg = Twist()
+                        vel_msg.linear.x = linear_val
+                        vel_msg.linear.y = 0
+                        vel_msg.linear.z = 0
+                        vel_msg.angular.x = 0 
+                        vel_msg.angular.y = 0
+                        vel_msg.angular.z = angular_val 
+                        pub = rospy.Publisher(topic_name, Twist, queue_size=10)
+                        pub.publish(vel_msg)
 
-                    msg = make_dict(description="succeed",
-                                    result={"value":val})
+                        return make_dict(description="succeed",
+                                        result={"value":val})
+                    msg = robotMove(input_data)
                 elif rosname == '/Camera/Rotate':
-                    if "value" not in input_data:
-                        msg = make_dict(description="wrong value format",
-                                        result={"error":1})
-                        pass
-                    
-                    val = float(input_data['value'])
-                    if val > 3.14 or val < -3.14:
-                        msg = make_dict(description="given value exceeds the defined range",
-                                        result={"error":1})
-                        pass
+                    def cameraRotate(input_data):
+                        if "value" not in input_data:
+                            return make_dict(description="wrong value format",
+                                            result={"error":1})
+                        
+                        val = float(input_data['value'])
+                        if val > 3.14 or val < -3.14:
+                            return make_dict(description="given value exceeds the defined range",
+                                            result={"error":1})
 
-                    dr_client = current_app.dr_dict['CameraRotatorSystemParams']
-                    topic_name = dr_client.get_configuration()['ROTATOR_COMMAND_TOPIC']
+                        dr_client = current_app.dr_dict['CameraRotatorSystemParams']
+                        topic_name = dr_client.get_configuration()['ROTATOR_COMMAND_TOPIC']
 
-                    pub = rospy.Publisher(topic_name, Float64, queue_size=10)
-                    pub.publish(Float64(val))
+                        pub = rospy.Publisher(topic_name, Float64, queue_size=10)
+                        pub.publish(Float64(val))
 
-                    msg = make_dict(description="succeed",
-                                    result={"value":val})
+                        return make_dict(description="succeed",
+                                        result={"value":val})
+                    msg = cameraRotate(input_data)
                 elif rosname == '/Robot/ParamDumpAll':
-                    if "path" not in input_data:
-                        msg = make_dict(description="wrong path format",
-                                        result={"error":1})
-                        pass
+                    def paramDumpAll(input_data):
+                        if "path" not in input_data:
+                            return make_dict(description="wrong path format",
+                                            result={"error":1})
 
-                    path = input_data["path"]
-                    result = {}
-                    for rosname, dr_client in current_app.dr_dict.items(): 
-                        result[rosname] = dr_client.get_configuration()
-                    with open(path, "w") as output_file:
-                        output_file.write(yaml.dump(result))
-                    msg = make_dict(description="succeed", result={"value":"1"})
+                        path = input_data["path"]
+                        result = {}
+                        for rosname, dr_client in current_app.dr_dict.items(): 
+                            result[rosname] = dr_client.get_configuration()
+                        with open(path, "w") as output_file:
+                            output_file.write(yaml.dump(result))
+                        return make_dict(description="succeed", result={"value":"1"})
+                    msg = paramDumpAll(input_data)
                 elif rosname == '/Robot/ParamLoadAll':
-                    if "path" not in input_data:
-                        msg = make_dict(description="wrong path format",
-                                        result={"error":1})
-                        pass
-                    path = input_data["path"]
-                    with open(path) as input_file:
-                        result = yaml.load(input_file.read())
-                    for rosname, dr_client in current_app.dr_dict.items(): 
-                        dr_client.update_configuration(result[rosname])
-                    msg = make_dict(description="succeed", result={"value":"1"})
+                    def paramLoadAll(input_data):
+                        if "path" not in input_data:
+                            return make_dict(description="wrong path format",
+                                            result={"error":1})
+                        path = input_data["path"]
+                        with open(path) as input_file:
+                            result = yaml.load(input_file.read())
+                        for rosname, dr_client in current_app.dr_dict.items(): 
+                            dr_client.update_configuration(result[rosname])
+                        return make_dict(description="succeed", result={"value":"1"})
+                    msg = paramLoadAll(input_data)
+                elif rosname == '/Robot/LEDControl':
+                    def ledControl(input_data):
+                        if "id" not in input_data or "state" not in input_data:
+                            return make_dict(description="wrong request format",
+                                            result={"error":1})
+
+                        id = int(input_data['id'])
+                        state = int(input_data['state'])
+
+                        if id < 0 or id > 2 or state < 0 or state > 1:
+                            return make_dict(description="given value exceeds the defined range",
+                                            result={"error":1})
+
+                        import rostopic, roslib
+
+                        data_type = rostopic.get_topic_type('/twinny_robot/LEDControl')[0]
+                        LEDControlMsg = roslib.message.get_message_class(data_type)
+
+                        pubmsg =  LEDControlMsg()
+                        pubmsg.ID = id
+                        pubmsg.STATE = state
+
+                        pub = current_app.pub['LEDControl']
+                        pub.publish(pubmsg)
+
+                        return make_dict(description="succeed", result={"value":"1"})
+                    msg = ledControl(input_data)
 
                 output_data = simplejson.dumps(msg, ignore_nan=True)
                 response = make_response(output_data, 200)
