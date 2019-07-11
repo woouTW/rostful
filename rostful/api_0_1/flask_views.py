@@ -597,7 +597,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                         id = int(input_data['id'])
                         state = int(input_data['state'])
 
-                        if id < 0 or id > 2 or state < 0 or state > 1:
+                        if id < 0 or id > 2 or state < 0 or state > 2:
                             return make_dict(description="given value exceeds the defined range",
                                             result={"error":1})
 
