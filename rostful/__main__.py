@@ -79,15 +79,19 @@ def ROSmsg2Json(msg):
 def switchReportCallback(data):
     payload = ROSmsg2Json(data)
     headers = {'Content-Type': 'application/json; charset=urf-8'}
-<<<<<<< HEAD
     URL = 'http://127.0.0.1:8081/SwitchReport'
-=======
-    URL = '127.0.0.1:8081/SwitchReport'
->>>>>>> fa5b12e59bd2576f0184428b449dbf3811051c85
     requests.post(URL, data=payload, headers=headers)
 
     return
     
+def bumperReportCallback(data):
+    payload = ROSmsg2Json(data)
+    headers = {'Content-Type': 'application/json; charset=urf-8'}
+    URL = 'http://127.0.0.1:8081/BumperReport'
+    requests.post(URL, data=payload, headers=headers)
+
+    return
+
 def joystickReportCallback(data):
     dataBody = yaml.full_load(str(data))
     del dataBody['header']
@@ -95,11 +99,7 @@ def joystickReportCallback(data):
     if joystickReportCallback.lastData != dataBody:
         payload = ROSmsg2Json(data)
         headers = {'Content-Type': 'application/json; charset=urf-8'}
-<<<<<<< HEAD
         URL = 'http://127.0.0.1:8081/JoystickReport'
-=======
-        URL = '127.0.0.1:8081/JoystickReport'
->>>>>>> fa5b12e59bd2576f0184428b449dbf3811051c85
         requests.post(URL, data=payload, headers=headers)
 
     joystickReportCallback.lastData = dataBody
@@ -163,45 +163,29 @@ def run(host, port, server, config, logfile, ros_args):
 
         # Dynamic reconfigure nodes initialization
         import dynamic_reconfigure.client
-<<<<<<< HEAD
         import rospy, rostopic, roslib
-=======
-<<<<<<< HEAD
-        import rospy, rostopic, roslib
-=======
-        import rospy
->>>>>>> e39aa04baaea1c4314c9827cf68cf8f06c0e6c9b
->>>>>>> fa5b12e59bd2576f0184428b449dbf3811051c85
 
         def null_function(config):
             pass
 
         rospy.init_node("dynamic_reconfigure_rospy_node")
 
-<<<<<<< HEAD
         # ROS topic subscription using rospy
         switch_type = rostopic.get_topic_type('/twinny_robot/SwitchReport')[0]
         joystick_type = rostopic.get_topic_type('/twinny_robot/JoystickReport')[0]
+        bumper_type = rostopic.get_topic_type('/twinny_robot/BumperReport')[0]
         led_type = rostopic.get_topic_type('/twinny_robot/LEDControl')[0]
 
         SwitchReport = roslib.message.get_message_class(switch_type)
         JoystickReport = roslib.message.get_message_class(joystick_type)
+        BumperReport = roslib.message.get_message_class(bumper_type)
         LEDControl = roslib.message.get_message_class(led_type)
-=======
-<<<<<<< HEAD
-        # ROS topic subscription using rospy
-        switch_type = rostopic.get_topic_type('/twinny_robot/SwitchReport')[0]
-        joystick_type = rostopic.get_topic_type('/twinny_robot/JoystickReport')[0]
-
-        SwitchReport = roslib.message.get_message_class(switch_type)
-        JoystickReport = roslib.message.get_message_class(joystick_type)
->>>>>>> fa5b12e59bd2576f0184428b449dbf3811051c85
         
         joystickReportCallback.lastData = JoystickReport()
 
         rospy.Subscriber('/twinny_robot/SwitchReport', SwitchReport, switchReportCallback)
         rospy.Subscriber('/twinny_robot/JoystickReport', JoystickReport, joystickReportCallback)
-<<<<<<< HEAD
+        rospy.Subscriber('/twinny_robot/BumperReport', BumperReport, bumperReportCallback)
         pub = rospy.Publisher('/twinny_robot/LEDControl', LEDControl)
 
         app.pub = { 'LEDControl': pub }
@@ -210,22 +194,11 @@ def run(host, port, server, config, logfile, ros_args):
         for node in app.config.get('DR_CLIENT_NODES'):
             node = node.strip('/')
             app.dr_dict[node] = dynamic_reconfigure.client.Client(node, timeout=30, config_callback=null_function)
-=======
-
-        app.dr_dict = {}
-
-        for node in app.config.get('DR_CLIENT_NODES'):
-            node = node.strip('/')
-            app.dr_dict[node] = dynamic_reconfigure.client.Client(node, timeout=30, config_callback=null_function)
-=======
-        app.dr_dict = {}
 
         for paramNode in app.config.get('PYROS_PARAMS'):
             paramNode = paramNode.strip('/').split('/')[0]
             if paramNode not in app.dr_dict:
                 app.dr_dict[paramNode] = dynamic_reconfigure.client.Client(paramNode, timeout=30, config_callback=null_function)
->>>>>>> e39aa04baaea1c4314c9827cf68cf8f06c0e6c9b
->>>>>>> fa5b12e59bd2576f0184428b449dbf3811051c85
         # configure logger
 
         # add log handler for warnings and more to sys.stderr.
