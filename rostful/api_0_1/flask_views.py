@@ -574,7 +574,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                             result[rosname] = dr_client.get_configuration()
                         with open(path, "w") as output_file:
                             output_file.write(yaml.dump(result))
-                        return make_dict(description="succeed", result={"value":"1"})
+                        return make_dict(description="succeed", result={"value":path})
                     msg = paramDumpAll(input_data)
                 elif rosname == '/Robot/ParamLoadAll':
                     def paramLoadAll(input_data):
@@ -586,7 +586,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                             result = yaml.load(input_file.read())
                         for rosname, dr_client in current_app.dr_dict.items(): 
                             dr_client.update_configuration(result[rosname])
-                        return make_dict(description="succeed", result={"value":"1"})
+                        return make_dict(description="succeed", result={"value":path})
                     msg = paramLoadAll(input_data)
                 elif rosname == '/Robot/LEDControl':
                     def ledControl(input_data):
@@ -613,7 +613,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                         pub = current_app.pub['LEDControl']
                         pub.publish(pubmsg)
 
-                        return make_dict(description="succeed", result={"value":"1"})
+                        return make_dict(description="succeed", result={"value":input_data})
                     msg = ledControl(input_data)
 
                 output_data = simplejson.dumps(msg, ignore_nan=True)
