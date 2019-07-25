@@ -521,10 +521,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                         linear_val = float(val["linear"])
                         angular_val = float(val["angular"])
                         
-                        if linear_val < 0 or angular_val < 0: 
-                            return make_dict(description="given value exceeds the defined range",
-                                            result={"error":1})
-
                         dr_client = current_app.dr_dict['BaseControllerSystemParams']
                         topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
 
