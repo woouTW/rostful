@@ -200,7 +200,7 @@ def run(host, port, server, config, logfile, ros_args):
         app.pub = { 'LEDControl': pub }
         app.dr_dict = {}
 
-        for node in app.config.get('DR_CLIENT_NODES'):
+        for node in app.config.get('SYSTEM_PARAM_GROUP'):
             node = node.strip('/')
             app.dr_dict[node] = dynamic_reconfigure.client.Client(node, timeout=30, config_callback=null_function)
 

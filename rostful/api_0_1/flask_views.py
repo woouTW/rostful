@@ -527,7 +527,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
                         dr_client = current_app.dr_dict['BaseControllerSystemParams']
                         topic_name = dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
-                        print(topic_name)
 
                         vel_msg = Twist()
                         vel_msg.linear.x = linear_val
