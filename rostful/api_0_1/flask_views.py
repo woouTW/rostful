@@ -345,27 +345,27 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             use_ros = ('CONTENT_TYPE' in request.environ and
                        ROS_MSG_MIMETYPE == request.environ['CONTENT_TYPE'].split(';')[0].strip())
 
-            services = current_app.services
+            services = current_app.config.get("PYROS_SERVICES")
             print(services)
             t0_1 = time.time()
             print("pyros service discover", t0_1-t0)
-            topics = current_app.topics
+            topics = current_app.config.get("PYROS_TOPICS")
             t0_2 = time.time()
             print("pyros topic discover", t0_2-t0_1)
-            params = current_app.params
+            params = current_app.config.get("PYROS_PARAMS")
             t0_3 = time.time()
             print("pyros params discover", t0_3-t0_2)
 
             t0_4 = time.time()
             if rosname in services:
                 mode = 'service'
-                service = services[rosname]
+                service = rosname
             elif rosname in topics:
                 mode = 'topic'
-                topic = topics[rosname]
+                topic = rosname
             elif rosname in params:
                 mode = 'param'
-                param = params[rosname]
+                param = rosname
             elif rosname == '/Robot/ParamDumpAll':
                 mode = 'custom'
             elif rosname == '/Robot/ParamLoadAll':
@@ -413,7 +413,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
             response = None
             if mode == 'service':
-                current_app.logger.debug('calling service %s with msg : %s', service.get('name'), input_data)
+                current_app.logger.debug('calling service %s with msg : %s', service, input_data)
                 t1 = time.time()
                 print("reading msg", t1-t0)
                 ret_msg = self.node_client.service_call(rosname, input_data)
@@ -446,7 +446,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 t3 = time.time()
                 print("service part end", t3-t2)
             elif mode == 'topic':
-                current_app.logger.debug('publishing \n%s to topic %s', input_data, topic.get('name'))
+                current_app.logger.debug('publishing \n%s to topic %s', input_data, topic)
                 self.node_client.topic_inject(rosname, input_data)
                 response = make_response('{}', 200)
                 response.mimetype = 'application/json'
