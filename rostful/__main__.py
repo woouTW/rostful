@@ -19,6 +19,9 @@ else:
     from . import create_app, set_pyros_client, setup_app_routes
 
 
+from geometry_msgs.msg import Twist
+from std_msgs.msg import Float64
+
 # Change that into something cleaner and related with the app itself (not server)
 # Middleware ? app context ? Tricky with dynamic imports...
 # middleware ref : https://github.com/miguelgrinberg/python-engineio/blob/master/engineio/middleware.py#L49
@@ -195,14 +198,24 @@ def run(host, port, server, config, logfile, ros_args):
         rospy.Subscriber('/twinny_robot/SwitchReport', SwitchReport, switchReportCallback)
         rospy.Subscriber('/twinny_robot/JoystickReport', JoystickReport, joystickReportCallback)
         rospy.Subscriber('/twinny_robot/BumperReport', BumperReport, bumperReportCallback)
-        pub = rospy.Publisher('/twinny_robot/LEDControl', LEDControl)
+        ledPub = rospy.Publisher('/twinny_robot/LEDControl', LEDControl, queue_size=10)
 
-        app.pub = { 'LEDControl': pub }
+        app.pub = { 'LEDControl': ledPub }
         app.dr_dict = {}
 
         for node in app.config.get('SYSTEM_PARAM_GROUP'):
             node = node.strip('/')
             app.dr_dict[node] = dynamic_reconfigure.client.Client(node, timeout=30, config_callback=null_function)
+
+        camera_dr_client = app.dr_dict['CameraRotatorSystemParams']
+        topic_name = camera_dr_client.get_configuration()['ROTATOR_COMMAND_TOPIC']
+
+        app.pub['cameraRotate'] = rospy.Publisher(topic_name, Float64, queue_size=10)
+        
+        move_dr_client = app.dr_dict['BaseControllerSystemParams']
+        topic_name = move_dr_client.get_configuration()['ROBOT_VELOCITY_COMMAND_TOPIC']
+
+        app.pub['robotMove'] = rospy.Publisher(topic_name, Twist, queue_size=10)
 
         #for paramNode in app.config.get('PYROS_PARAMS'):
         #    paramNode = paramNode.strip('/').split('/')[0]
