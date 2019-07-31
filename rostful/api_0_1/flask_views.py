@@ -329,6 +329,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def post(self, rosname, *args, **kwargs):
+        start_t = time.clock()
         # fail early if no pyros client
         if self.node_client is None:
             current_app.logger.warn('404 : %s', rosname)
@@ -506,7 +507,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                             if ret_msg["flag"] == False:
                                 return make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
                         return make_dict(description="succeed", result={"value":val})
-                    msg = activateAll(msg)
+                    msg = activateAll(input_data)
                 elif rosname == '/Robot/Move':
                     def robotMove(input_data):
                         if "value" not in input_data:
@@ -615,6 +616,8 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response = make_response(output_data, 200)
                 response.mimetype = 'application/json'
             
+            finish_t = time.clock()
+            print("Time elapsed: ", finish_t - start_t)
             return response
 
             # converting pyros exceptions to proper rostful exceptions
