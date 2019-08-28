@@ -154,7 +154,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
         # dynamic import
         from pyros_interfaces_ros import definitions
         from pyros.client.client import PyrosServiceTimeout, PyrosServiceNotFound
-        print("class initialization", time.time()-self.start_time)
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def get(self, rosname=None):
@@ -331,14 +330,12 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
 
     # TODO: think about login rest service before disabling REST services if not logged in
     def post(self, rosname, *args, **kwargs):
-        start_t = time.time()
         # fail early if no pyros client
         if self.node_client is None:
             current_app.logger.warn('404 : %s', rosname)
             return make_response('', 404)
 
         try:
-            t0 = time.time()
             rosname = '/' + rosname
             #current_app.logger.debug('POST')
             length = int(request.environ['CONTENT_LENGTH'])
@@ -346,17 +343,9 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                        ROS_MSG_MIMETYPE == request.environ['CONTENT_TYPE'].split(';')[0].strip())
 
             services = current_app.config.get("PYROS_SERVICES")
-            print(services)
-            t0_1 = time.time()
-            print("pyros service discover", t0_1-t0)
             topics = current_app.config.get("PYROS_TOPICS")
-            t0_2 = time.time()
-            print("pyros topic discover", t0_2-t0_1)
             params = current_app.config.get("PYROS_PARAMS")
-            t0_3 = time.time()
-            print("pyros params discover", t0_3-t0_2)
 
-            t0_4 = time.time()
             if rosname in services:
                 mode = 'service'
                 service = rosname
@@ -381,8 +370,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             else:
                 current_app.logger.warn('404 : %s', rosname)
                 return make_response('', 404)
-            t0_5 = time.time()
-            print("rosname check", t0_5-t0_4)
 
             # we are now sending via the client node, which will convert the
             # received dict into the correct message type for the service (or
@@ -399,8 +386,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     message="Your request payload was incorrect: {exc_value}".format(exc_value=exc_value),
                     traceback=tblib.Traceback(sys.exc_info()[2]).to_dict()
                 )
-            t0_6 = time.time()
-            print("input data parsing", t0_6-t0_5)
 
             # input_msg = input_msg_type() # was topic.rostype but we dont have it here ( cant serialize and transfer easily )
             # current_app.logger.debug('input_msg:%r', input_msg)
@@ -414,11 +399,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
             response = None
             if mode == 'service':
                 current_app.logger.debug('calling service %s with msg : %s', service, input_data)
-                t1 = time.time()
-                print("reading msg", t1-t0)
                 ret_msg = self.node_client.service_call(rosname, input_data)
-                t2 = time.time()
-                print("pyros client service call takse", t2-t1)
                 name, val = input_data.items()[0]
 
                 if use_ros:
@@ -435,7 +416,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                     output_data = "{}"
                     content_type = 'application/json'
 
-                print(ret_msg)
                 if ret_msg["flag"] == False:
                     msg = make_dict(description="wrong value, it should be one of enable/disable", result={"error":1})
                 else:
@@ -443,8 +423,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 output_data = simplejson.dumps(msg, ignore_nan=True)
                 response = make_response(output_data, 200)
                 response.mimetype = content_type
-                t3 = time.time()
-                print("service part end", t3-t2)
             elif mode == 'topic':
                 current_app.logger.debug('publishing \n%s to topic %s', input_data, topic)
                 self.node_client.topic_inject(rosname, input_data)
@@ -632,8 +610,6 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                 response = make_response(output_data, 200)
                 response.mimetype = 'application/json'
             
-            finish_t = time.time()
-            print("Time elapsed: ", finish_t - self.start_time)
             return response
 
             # converting pyros exceptions to proper rostful exceptions
