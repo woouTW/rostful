@@ -546,7 +546,7 @@ class BackEnd(restful.Resource):   # TODO : unit test that stuff !!! http://flas
                                             result={"error":1})
 
 
-                        pub = current_app.pub['cameraRoate']
+                        pub = current_app.pub['cameraRotate']
                         pub.publish(Float64(val))
 
                         return make_dict(description="succeed",
